@@ -5,5 +5,5 @@ import searchengine.dto.statistics.StatisticsResponse;
 import java.net.MalformedURLException;
 
 public interface StatisticsService {
-    StatisticsResponse getStatistics() throws MalformedURLException;
+    searchengine.dto.statistics.statistics.StatisticsResponse getStatistics() throws MalformedURLException;
 }
