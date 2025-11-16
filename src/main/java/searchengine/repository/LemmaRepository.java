@@ -1,27 +1,34 @@
 package searchengine.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import searchengine.model.Lemma;
+import searchengine.model.SiteTable;
 
+import javax.transaction.Transactional;
 import java.util.List;
 
 @Repository
 public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
-    @Query(value = "select * from lemma t where t.lemma = :lemma and t.site_id = :siteId for update", nativeQuery = true)
-    Lemma lemmaExist(String lemma, Integer siteId);
+    @Query(value = "select * from lemma t where t.lemma = :lemma for update", nativeQuery = true)
+    Lemma lemmaExists(@Param("lemma") String lemma);
 
-    @Query(value = "select count(l) from Lemma l where l.siteId = :siteId")
-    Integer findCountRecordBySiteId(Integer siteId);
+    @Modifying
+    @Query(value = "update Lemma t set t.frequency = t.frequency + :frequency where t.id = :idLemma")
+    void incrementFrequency(Integer idLemma, Integer frequency);
 
-    @Query(value = "select l.frequency from Lemma l where l.lemma = :lemma and (:siteId is null or l.siteId = :siteId)")
-    Integer findCountPageByLemma(String lemma, Integer siteId);
+    @Transactional
+    Lemma getById(long lemmaID);
 
-    @Query(value = "select l.id from Lemma l where l.lemma = :lemma")
-    Integer findIdLemma(String lemma);
+    @Transactional
+    long countBySiteId(SiteTable site);
 
-    @Query(value = "select l from Lemma l where l.lemma = :lemma and (:siteId is null or l.siteId = :siteId)")
-    List<Lemma> findLemmasByLemmaAndSiteId(String lemma, Integer siteId);
+    @Transactional
+    List<Lemma> findBySiteId(SiteTable siteId);
+    @Transactional
+    @Query(value = "select * from Lemma where Lemma.lemma in :lemmas AND Lemma.site_id = :site", nativeQuery = true)
+    List<Lemma> findLemmaListBySite(List<String> lemmas, SiteTable site);
 }

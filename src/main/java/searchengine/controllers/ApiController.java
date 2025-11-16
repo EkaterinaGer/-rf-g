@@ -1,20 +1,24 @@
 package searchengine.controllers;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import searchengine.config.SitesList;
-import searchengine.dto.responses.NotOkResponse;
-import searchengine.dto.responses.OkResponse;
-import searchengine.dto.statistics.statistics.StatisticsResponse;
-import searchengine.model.SitePage;
+import searchengine.dto.SearchDto;
+import searchengine.dto.response.ResultDto;
+import searchengine.dto.statistics.StatisticsResponse;
+import searchengine.repository.SiteRepository;
+import searchengine.search.SearchStarter;
 import searchengine.services.ApiService;
-import searchengine.services.SearchService;
 import searchengine.services.StatisticsService;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @RestController
@@ -22,56 +26,68 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RequiredArgsConstructor
 public class ApiController {
 
-    private final SearchService searchService;
     private final StatisticsService statisticsService;
     private final ApiService apiService;
     private final AtomicBoolean indexingProcessing = new AtomicBoolean(false);
     private final SitesList sitesList;
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final LemmaService lemmaService;
+    private final SiteRepository siteRepository;
+
+    private final SearchStarter searchStarter;
 
     @GetMapping("/statistics")
-    public StatisticsResponse statistics() throws IOException {
-        return statisticsService.getStatistics();
+    public ResponseEntity<StatisticsResponse> statistics() {
+        return ResponseEntity.ok(statisticsService.getStatistics());
     }
-
     @GetMapping("/startIndexing")
-    public Object startIndexing() {
-        if (indexingProcessing.get()) {
-            return new NotOkResponse("Индексация уже запущена");
+    public ResultDto startIndexing() {
+        if(indexingProcessing.get()) {
+            return new ResultDto(false, "Индексация уже идёт.", HttpStatus.CONFLICT);
         } else {
-            executor.submit(() -> {
-                indexingProcessing.set(true);
-                apiService.startIndexing(indexingProcessing);
-            });
-            return new OkResponse();
+            indexingProcessing.set(true);
+            Runnable start = () -> apiService.startIndexing(indexingProcessing);
+            new Thread(start).start();
+            return new ResultDto(true, HttpStatus.OK);
         }
     }
 
     @GetMapping("/stopIndexing")
-    public Object stopIndexing() {
+    public ResultDto stopIndexing() {
         if (!indexingProcessing.get()) {
-            return new NotOkResponse("Индексация не запущена");
+            return new ResultDto(false,"Индексация не запущена." , HttpStatus.METHOD_NOT_ALLOWED);
         } else {
             indexingProcessing.set(false);
-            return new OkResponse();
+            return new ResultDto(true, HttpStatus.OK);
         }
     }
 
-    @PostMapping("/indexPage")
-    public Object indexPage(@RequestParam String url) throws IOException {
-        URL refUrl = new URL(url);
-        SitePage sitePage = new SitePage();
-        sitesList.getSites().stream()
-                .filter(site -> refUrl.getHost().equals(site.getUrl().getHost()))
-                .findFirst()
-                .ifPresentOrElse(site -> {
-                    sitePage.setName(site.getName());
-                    sitePage.setUrl(site.getUrl().toString());
-                }, () -> {
-                    throw new IllegalArgumentException(
-                            "Данная страница находится за пределами сайтов указанных в конфигурационном файле");
-                });
-        apiService.refreshPage(sitePage, refUrl);
-        return new OkResponse();
+    @GetMapping("/indexPage")
+    public ResultDto indexPage(@RequestParam URL url) throws IOException {
+        try {
+            sitesList.getSites().stream().filter(site -> url.getHost().equals(site.getUrl().getHost())).findFirst().orElseThrow();
+        } catch (RuntimeException ex) {
+            return new ResultDto(false, "Данная страница находится за пределами сайтов, " +
+                    "указанных в конфигурационном файле.", HttpStatus.BAD_REQUEST);
+        }
+        lemmaService.getLemmasFromUrl(url);
+        return new ResultDto(true, HttpStatus.OK);
+    }
+
+    @GetMapping("/search")
+    public ResultDto search(@RequestParam(name = "query", required = false, defaultValue = "") String query,
+                            @RequestParam(name = "site", required = false, defaultValue = "") String site,
+                            @RequestParam(name = "offset", required = false, defaultValue = "0") int offset) {
+        List<SearchDto> searchData;
+        if (!site.isEmpty()) {
+            if (siteRepository.findByUrl(site) == null) {
+                return new ResultDto(false, "Данная страница находится за пределами сайтов,\n" +
+                        "указанных в конфигурационном файле", HttpStatus.BAD_REQUEST);
+            } else {
+                searchData = searchStarter.getSearchFromOneSite(query, site, offset, 20);
+            }
+        } else {
+            searchData = searchStarter.getFullSearch(query, offset, 20);
+        }
+        return new ResultDto(true, searchData.size(), searchData, HttpStatus.OK);
     }
 }

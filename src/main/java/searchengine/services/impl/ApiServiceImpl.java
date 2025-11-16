@@ -1,42 +1,112 @@
 package searchengine.services.impl;
-
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import searchengine.exception.IndexingException;
-import searchengine.model.SitePage;
+import searchengine.config.Connection;
+import searchengine.config.Site;
+import searchengine.config.SitesList;
+import searchengine.model.SitesPageTable;
+import searchengine.model.SiteTable;
+import searchengine.model.SiteStatusType;
+import searchengine.repository.PageRepository;
+import searchengine.repository.SiteRepository;
 import searchengine.services.ApiService;
+import searchengine.services.IndexService;
 
-import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ApiServiceImpl implements ApiService {
+    private final SiteRepository siteRepository;
+    private final PageRepository pageRepository;
+    private final SitesList indexingSites;
+    private final Set<SiteTable> sitesPageTablesFromDB;
+    private final Connection connection;
+    private AtomicBoolean indexingProcessing;
+    private final LemmaService lemmaService;
+    private final IndexService indexService;
+
+
 
     @Override
     public void startIndexing(AtomicBoolean indexingProcessing) {
-        log.info("Начало индексации сайтов");
+        this.indexingProcessing = indexingProcessing;
         try {
-
-        } catch (Exception e) {
-            log.error("Ошибка индексации", e);
-            throw new IndexingException(e.getMessage());
-        } finally {
-            indexingProcessing.set(false);
-            log.info("Индексация завершена");
+            deleteDataInDB();
+            addSitesToDB();
+            indexAllSites();
+        } catch (RuntimeException | InterruptedException e) {
+            e.printStackTrace();
         }
     }
 
-    @Override
-    public void refreshPage(SitePage sitePage, URL url) {
-        log.info("Обновление страницы: {}", url);
-        try {
-
-        } catch (Exception e) {
-            log.error("Ошибка при обновлении страницы {}", url, e);
-            throw new IndexingException("Ошибка при обновлении страницы");
+    private void deleteDataInDB() {
+        List<SiteTable> sitesFromDB = siteRepository.findAll();
+        for (SiteTable siteTableDb : sitesFromDB) {
+            for (Site siteApp : indexingSites.getSites()) {
+                if (siteTableDb.getUrl().equals(siteApp.getUrl())) {
+                    siteRepository.deleteById(siteTableDb.getId());
+                }
+            }
         }
+    }
+
+    private void addSitesToDB() {
+        for (Site siteApp : indexingSites.getSites()) {
+            SiteTable siteTableDAO = new SiteTable();
+            siteTableDAO.setSiteStatusType(SiteStatusType.INDEXING);
+            siteTableDAO.setName(siteApp.getName());
+            siteTableDAO.setUrl(String.valueOf(siteApp.getUrl()));
+            siteRepository.save(siteTableDAO);
+        }
+
+    }
+
+    private void indexAllSites() throws InterruptedException {
+        sitesPageTablesFromDB.addAll(siteRepository.findAll());
+        List<String> urlToIndexing = new ArrayList<>();
+        for (Site siteApp : indexingSites.getSites()) {
+            urlToIndexing.add(String.valueOf(siteApp.getUrl()));
+        }
+        sitesPageTablesFromDB.removeIf(siteTable -> !urlToIndexing.contains(siteTable.getUrl()));
+        List<Thread> indexingThreadList = new ArrayList<>();
+        for (SiteTable siteDomain : sitesPageTablesFromDB) {
+            Runnable indexSite = () -> {
+                ConcurrentHashMap<String, SitesPageTable> resultForkJoinPageIndexer = new ConcurrentHashMap<>();
+                try {
+                    System.out.println("Запущена индексация "+siteDomain.getUrl());
+                    new ForkJoinPool().invoke(new SiteCrawler(siteRepository, pageRepository, siteDomain, "", resultForkJoinPageIndexer, connection, indexingProcessing, lemmaService, indexService));
+                } catch (SecurityException ex) {
+                    SiteTable siteTable = siteRepository.findById(siteDomain.getId()).orElseThrow();
+                    siteTable.setSiteStatusType(SiteStatusType.FAILED);
+                    siteTable.setLastError(ex.getMessage());
+                    siteRepository.save(siteTable);
+                }
+                if (!indexingProcessing.get()) {
+                    SiteTable siteTable = siteRepository.findById(siteDomain.getId()).orElseThrow();
+                    siteTable.setSiteStatusType(SiteStatusType.FAILED);
+                    siteTable.setLastError("Indexing stopped by user");
+                    siteRepository.save(siteTable);
+                } else {
+                    System.out.println("Проиндексирован сайт: " + siteDomain.getName());
+                    SiteTable siteTable = siteRepository.findById(siteDomain.getId()).orElseThrow();
+                    siteTable.setSiteStatusType(SiteStatusType.INDEXED);
+                    siteRepository.save(siteTable);
+                }
+
+            };
+            Thread thread = new Thread(indexSite);
+            indexingThreadList.add(thread);
+            thread.start();
+        }
+        for (Thread thread :indexingThreadList) {
+            thread.join();
+        }
+        indexingProcessing.set(false);
     }
 }
