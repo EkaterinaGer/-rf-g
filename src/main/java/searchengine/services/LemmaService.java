@@ -1,9 +1,10 @@
 package searchengine.services;
 
 import java.io.IOException;
-import java.util.Map;
+import java.net.URL;
+import java.util.HashMap;
 
 public interface LemmaService {
-    Map<String, Integer> getLemmasFromText(String text) throws IOException;
-    String getLemmaByWord(String word);
+    HashMap<String, Integer> getLemmasFromText(String text) throws IOException;
+    void getLemmasFromUrl(URL url) throws IOException;
 }
