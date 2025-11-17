@@ -1,6 +1,4 @@
 package searchengine.model;
-
-import com.sun.istack.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -10,30 +8,32 @@ import java.sql.Timestamp;
 import java.util.List;
 
 @Entity
-@Table(name = "site")
+@Table(name = "site_table")
 @NoArgsConstructor
 @Setter
 @Getter
 public class SiteTable {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @NotNull
-    private int id;
-    @Enumerated(EnumType.STRING)
-    @NotNull
-    private SiteStatusType siteStatusType;
-    @Column(name = "status_time")
-    private Timestamp statusTime;
-    @Column(name = "last_error")
-    private String lastError = null;
-    @NotNull
-    @Column(columnDefinition = "VARCHAR(255)")
-    private String url;
-    @NotNull
-    @Column(columnDefinition = "VARCHAR(255)")
-    private String name;
-    @OneToMany(cascade = CascadeType.ALL)
-    @JoinColumn(name = "site_id")
-    private List<SitesPageTable> sitesPageTables;
+    private Integer id;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 50)
+    private SiteStatusType siteStatusType;
+
+    @Column(name = "status_time", nullable = false)
+    private Timestamp statusTime;
+
+    @Column(name = "last_error")
+    private String lastError;
+
+    @Column(nullable = false, length = 255)
+    private String url;
+
+    @Column(nullable = false, length = 255)
+    private String name;
+
+    @OneToMany(mappedBy = "siteTable", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<SitesPageTable> sitesPageTables;
 }
