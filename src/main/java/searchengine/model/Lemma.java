@@ -1,34 +1,33 @@
 package searchengine.model;
 
-import com.sun.istack.NotNull;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import javax.persistence.*;
 
 @Entity
-@Table(name = "lemma", uniqueConstraints = @UniqueConstraint(columnNames = "lemma"))
+@Table(
+        name = "lemma",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"lemma", "site_id"})
+)
 @Data
 @NoArgsConstructor
 public class Lemma {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @NotNull
-    private int id;
+    private Integer id;
 
-    @NotNull
-    private int frequency;
+    @Column(nullable = false)
+    private Integer frequency;
 
-    @NotNull
-    @Column(columnDefinition = "VARCHAR(255)")
+    @Column(nullable = false, length = 255)
     private String lemma;
 
-    @NotNull
-    @Column(name = "site_id")
-    private int siteId;
+    @Column(name = "site_id", nullable = false)
+    private Integer siteId;
 
-    @ManyToOne
-    @JoinColumn(name = "site_id", insertable = false, updatable = false, nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "site_id", insertable = false, updatable = false)
     private SiteTable siteTable;
-
 }
