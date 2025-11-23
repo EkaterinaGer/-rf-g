@@ -10,6 +10,7 @@ import searchengine.model.SitesPageTable;
 import searchengine.repository.IndexRepository;
 import searchengine.repository.LemmaRepository;
 import searchengine.services.IndexService;
+import searchengine.services.LemmaService;
 
 import javax.transaction.Transactional;
 import java.io.IOException;
@@ -37,7 +38,7 @@ public class IndexServiceImpl implements IndexService {
     }
 
     @Transactional
-    private void saveLemma(String key, Integer value, SitesPageTable indexingPage) {
+    public void saveLemma(String key, Integer value, SitesPageTable indexingPage) {
         Lemma existLemmaInDB = lemmaRepository.lemmaExists(key);
         if (existLemmaInDB != null) {
             existLemmaInDB.setFrequency(existLemmaInDB.getFrequency() + value);
@@ -66,7 +67,7 @@ public class IndexServiceImpl implements IndexService {
         } else {
             SearchIndex index = new SearchIndex();
             index.setLemmaId(lemmaInDB.getId());
-            index.setLemmaCount(count);
+            index.setLemmaCount(Float.valueOf(count));
             index.setLemma(lemmaInDB);
             index.setPageId(indexingPage.getId());
             index.setSitesPageTable(indexingPage);

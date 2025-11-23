@@ -9,11 +9,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import searchengine.config.SitesList;
 import searchengine.dto.SearchDto;
-import searchengine.dto.response.ResultDto;
+import searchengine.dto.responses.ResultDto;
 import searchengine.dto.statistics.StatisticsResponse;
 import searchengine.repository.SiteRepository;
 import searchengine.search.SearchStarter;
 import searchengine.services.ApiService;
+import searchengine.services.LemmaService;
 import searchengine.services.StatisticsService;
 
 import java.io.IOException;

@@ -11,6 +11,7 @@ import searchengine.model.SiteTable;
 import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.services.IndexService;
+import searchengine.services.LemmaService;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;

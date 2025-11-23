@@ -11,6 +11,7 @@ import searchengine.repository.PageRepository;
 import searchengine.repository.SiteRepository;
 import searchengine.services.ApiService;
 import searchengine.services.IndexService;
+import searchengine.services.LemmaService;
 
 import java.util.ArrayList;
 import java.util.List;
