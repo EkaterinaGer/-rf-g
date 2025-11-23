@@ -8,6 +8,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.springframework.stereotype.Component;
 import searchengine.config.LemmaConfiguration;
+import searchengine.services.LemmaService;
 
 import java.io.IOException;
 import java.net.URL;
