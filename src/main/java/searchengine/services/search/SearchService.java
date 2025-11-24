@@ -7,6 +7,7 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.stereotype.Service;
 import searchengine.dto.SearchDto;
+import searchengine.dto.responses.ResultDto;
 import searchengine.exception.CurrentIOException;
 import searchengine.lemma.LemmaEngine;
 import searchengine.model.SearchIndex;
@@ -38,8 +39,8 @@ public record SearchService(LemmaEngine lemmaEngine, LemmaRepository lemmaReposi
             SiteTable pageSite = page.getSiteTable();
             String site = pageSite.getUrl();
             String siteName = pageSite.getName();
-            String title = clearCodeFromTag(content, "title");
-            String body = clearCodeFromTag(content, "body");
+            String title = clearCodeFromTag(content);
+            String body = clearCodeFromTag(content);
             titleStringBuilder.append(title).append(body);
             float pageValue = pageList.get(page);
             List<Integer> lemmaIndex = new ArrayList<>();
@@ -169,11 +170,13 @@ public record SearchService(LemmaEngine lemmaEngine, LemmaRepository lemmaReposi
         } else return result;
     }
 
-    public  String clearCodeFromTag(String text, String element) {
+    public ResultDto clearCodeFromTag(String text) {
         Document doc = Jsoup.parse(text);
         Elements elements = doc.select(element);
         String html = elements.stream().map(Element::html).collect(Collectors.joining());
         return Jsoup.parse(html).text();
     }
+
+
 
 }

@@ -1,54 +1,35 @@
 package searchengine.dto.responses;
 
-import lombok.Data;
-import org.springframework.http.HttpStatus;
-import searchengine.dto.SearchDto;
-
 import java.util.List;
 
-@Data
 public class ResultDto {
 
-    private boolean result;
+    private boolean result = true;
+    private List<SearchResultItem> data;
 
-    private String error;
+    public boolean isResult() {
+        return result;
+    }
 
-    private int count;
-
-    private HttpStatus status;
-
-    private List<SearchDto> data;
-
-    public ResultDto(boolean result) {
+    public void setResult(boolean result) {
         this.result = result;
     }
 
-    public ResultDto(boolean result, HttpStatus status) {
-        this.result = result;
-        this.status = status;
+    public List<SearchResultItem> getData() {
+        return data;
     }
 
-    public ResultDto(boolean result, String error) {
-        this.result = result;
-        this.error = error;
-    }
-
-    public ResultDto(boolean result, String error, HttpStatus status) {
-        this.result = result;
-        this.error = error;
-        this.status = status;
-    }
-
-    public ResultDto(boolean result, int count, List<SearchDto> data) {
-        this.result = result;
-        this.count = count;
+    public void setData(List<SearchResultItem> data) {
         this.data = data;
     }
 
-    public ResultDto(boolean result, int count, List<SearchDto> data, HttpStatus status) {
-        this.result = result;
-        this.count = count;
-        this.data = data;
-        this.status = status;
+    public static class SearchResultItem {
+        private String site;
+        private String title;
+        private String uri;
+        private String snippet;
+        private double relevance;
+
+
     }
 }
