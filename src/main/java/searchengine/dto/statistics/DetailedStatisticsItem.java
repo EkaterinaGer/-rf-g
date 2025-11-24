@@ -1,14 +1,13 @@
 package searchengine.dto.statistics;
 
-import lombok.Data;
+import searchengine.model.SiteStatusType;
 
-@Data
 public class DetailedStatisticsItem {
+
     private String url;
     private String name;
-    private String status;
-    private long statusTime;
-    private String error;
+    private SiteStatusType status;
     private int pages;
     private int lemmas;
+
 }
