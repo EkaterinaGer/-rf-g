@@ -1,18 +1,28 @@
+server:
+  port: 8080
+
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/searchengine
-    username: postgres
-    password: your_password
+    username: root
+    password: 123456789
     driver-class-name: org.postgresql.Driver
+
   jpa:
     hibernate:
-      ddl-auto: none
-    show-sql: true
+      ddl-auto: update
     properties:
-      hibernate.dialect: org.hibernate.dialect.PostgreSQLDialect
+      hibernate:
+        format_sql: true
+    show-sql: true
 
-  liquibase:
-    change-log: classpath:db/changelog/db.changelog-master.yaml
+liquibase:
+  enabled: true
+  change-log: classpath:db/changelog/db.changelog-master.yaml
 
-server:
-  port: 8080
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE

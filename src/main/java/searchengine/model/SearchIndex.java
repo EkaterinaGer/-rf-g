@@ -1,6 +1,6 @@
 package searchengine.model;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "search_index")

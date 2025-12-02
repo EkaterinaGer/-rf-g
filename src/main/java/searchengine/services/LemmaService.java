@@ -1,13 +1,8 @@
 package searchengine.services;
 
 import java.io.IOException;
-import java.net.URL;
-import java.util.HashMap;
+import java.util.Map;
 
 public interface LemmaService {
-    HashMap<String, Integer> getLemmasFromText(String text) throws IOException;
-
-    String getLemmaByWord(String word);
-
-    void getLemmasFromUrl(URL url) throws IOException;
+    Map<String, Integer> getLemmas(String text) throws IOException;
 }
