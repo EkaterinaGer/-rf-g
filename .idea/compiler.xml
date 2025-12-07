@@ -15,7 +15,7 @@
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
       <module name="contact-list" options="-parameters" />
-      <module name="searchengine" options="" />
+      <module name="searchengine" options="-parameters" />
     </option>
   </component>
 </project>

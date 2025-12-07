@@ -1,5 +1,6 @@
 package searchengine.dto.statistics;
 
+import searchengine.services.impl.TotalStatistics;
 import java.util.List;
 
 public class StatisticsData {
@@ -7,19 +8,9 @@ public class StatisticsData {
     private TotalStatistics total;
     private List<DetailedStatisticsItem> detailed;
 
-    public TotalStatistics getTotal() {
-        return total;
-    }
+    public TotalStatistics getTotal() { return total; }
+    public void setTotal(TotalStatistics total) { this.total = total; }
 
-    public void setTotal(TotalStatistics total) {
-        this.total = total;
-    }
-
-    public List<DetailedStatisticsItem> getDetailed() {
-        return detailed;
-    }
-
-    public void setDetailed(List<DetailedStatisticsItem> detailed) {
-        this.detailed = detailed;
-    }
+    public List<DetailedStatisticsItem> getDetailed() { return detailed; }
+    public void setDetailed(List<DetailedStatisticsItem> detailed) { this.detailed = detailed; }
 }

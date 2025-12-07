@@ -1,4 +1,5 @@
 package searchengine.services.impl;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import searchengine.config.Connection;
@@ -13,26 +14,25 @@ import searchengine.services.ApiService;
 import searchengine.services.IndexService;
 import searchengine.services.LemmaService;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
 
 @Service
 @RequiredArgsConstructor
 public class ApiServiceImpl implements ApiService {
+
     private final SiteRepository siteRepository;
     private final PageRepository pageRepository;
     private final SitesList indexingSites;
-    private final Set<SiteTable> sitesPageTablesFromDB;
     private final Connection connection;
-    private AtomicBoolean indexingProcessing;
     private final LemmaService lemmaService;
     private final IndexService indexService;
 
-
+    private AtomicBoolean indexingProcessing;
+    private final Logger logger = Logger.getLogger(ApiServiceImpl.class.getName());
 
     @Override
     public void startIndexing(AtomicBoolean indexingProcessing) {
@@ -41,73 +41,85 @@ public class ApiServiceImpl implements ApiService {
             deleteDataInDB();
             addSitesToDB();
             indexAllSites();
-        } catch (RuntimeException | InterruptedException e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.severe("Индексация была прервана");
+        } catch (Exception e) {
+            logger.severe("Ошибка при индексации: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
+    @Override
+    public void stopIndexing() {
+
+    }
+
+    @Override
+    public List<SiteTable> getAllSitesStatus() {
+        return List.of();
+    }
+
+    @Override
+    public boolean isIndexing() {
+        return false;
+    }
+
     private void deleteDataInDB() {
-        List<SiteTable> sitesFromDB = siteRepository.findAll();
-        for (SiteTable siteTableDb : sitesFromDB) {
-            for (Site siteApp : indexingSites.getSites()) {
-                if (siteTableDb.getUrl().equals(siteApp.getUrl())) {
-                    siteRepository.deleteById(siteTableDb.getId());
-                }
-            }
-        }
+        List<String> siteUrls = indexingSites.getSites().stream()
+                .map(site -> site.getUrl().toString())
+                .toList();
+        siteRepository.deleteAll(siteRepository.findByUrlIn(siteUrls));
     }
 
     private void addSitesToDB() {
         for (Site siteApp : indexingSites.getSites()) {
-            SiteTable siteTableDAO = new SiteTable();
-            siteTableDAO.setSiteStatusType(SiteStatusType.INDEXING);
-            siteTableDAO.setName(siteApp.getName());
-            siteTableDAO.setUrl(String.valueOf(siteApp.getUrl()));
-            siteRepository.save(siteTableDAO);
+            SiteTable siteTable = new SiteTable();
+            siteTable.setStatus(SiteStatusType.INDEXING); // исправлено
+            siteTable.setName(siteApp.getName());
+            siteTable.setUrl(siteApp.getUrl().toString());
+            siteRepository.save(siteTable);
         }
-
     }
 
     private void indexAllSites() throws InterruptedException {
-        sitesPageTablesFromDB.addAll(siteRepository.findAll());
-        List<String> urlToIndexing = new ArrayList<>();
-        for (Site siteApp : indexingSites.getSites()) {
-            urlToIndexing.add(String.valueOf(siteApp.getUrl()));
-        }
-        sitesPageTablesFromDB.removeIf(siteTable -> !urlToIndexing.contains(siteTable.getUrl()));
-        List<Thread> indexingThreadList = new ArrayList<>();
-        for (SiteTable siteDomain : sitesPageTablesFromDB) {
+        List<SiteTable> sitesFromDB = siteRepository.findAll();
+        ForkJoinPool pool = new ForkJoinPool(sitesFromDB.size());
+
+        List<Thread> threads = new ArrayList<>();
+        for (SiteTable siteTable : sitesFromDB) {
             Runnable indexSite = () -> {
-                ConcurrentHashMap<String, SitesPageTable> resultForkJoinPageIndexer = new ConcurrentHashMap<>();
+                ConcurrentHashMap<String, SitesPageTable> resultPages = new ConcurrentHashMap<>();
                 try {
-                    System.out.println("Запущена индексация "+siteDomain.getUrl());
-                    new ForkJoinPool().invoke(new SiteCrawler(siteRepository, pageRepository, siteDomain, "", resultForkJoinPageIndexer, connection, indexingProcessing, lemmaService, indexService));
-                } catch (SecurityException ex) {
-                    SiteTable siteTable = siteRepository.findById(siteDomain.getId()).orElseThrow();
-                    siteTable.setSiteStatusType(SiteStatusType.FAILED);
+                    logger.info("Запущена индексация: " + siteTable.getUrl());
+                    pool.invoke(new SiteCrawler(siteRepository, pageRepository, siteTable,
+                            "", resultPages, connection, indexingProcessing, lemmaService, indexService));
+
+                    if (!indexingProcessing.get()) {
+                        siteTable.setStatus(SiteStatusType.FAILED);
+                        siteTable.setLastError("Индексация остановлена пользователем");
+                    } else {
+                        siteTable.setStatus(SiteStatusType.INDEXED);
+                        logger.info("Проиндексирован сайт: " + siteTable.getName());
+                    }
+                    siteRepository.save(siteTable);
+                } catch (Exception ex) {
+                    siteTable.setStatus(SiteStatusType.FAILED);
                     siteTable.setLastError(ex.getMessage());
                     siteRepository.save(siteTable);
+                    logger.severe("Ошибка при индексации " + siteTable.getUrl() + ": " + ex.getMessage());
                 }
-                if (!indexingProcessing.get()) {
-                    SiteTable siteTable = siteRepository.findById(siteDomain.getId()).orElseThrow();
-                    siteTable.setSiteStatusType(SiteStatusType.FAILED);
-                    siteTable.setLastError("Indexing stopped by user");
-                    siteRepository.save(siteTable);
-                } else {
-                    System.out.println("Проиндексирован сайт: " + siteDomain.getName());
-                    SiteTable siteTable = siteRepository.findById(siteDomain.getId()).orElseThrow();
-                    siteTable.setSiteStatusType(SiteStatusType.INDEXED);
-                    siteRepository.save(siteTable);
-                }
-
             };
             Thread thread = new Thread(indexSite);
-            indexingThreadList.add(thread);
+            threads.add(thread);
             thread.start();
         }
-        for (Thread thread :indexingThreadList) {
+
+        for (Thread thread : threads) {
             thread.join();
         }
+
         indexingProcessing.set(false);
+        pool.shutdown();
     }
 }

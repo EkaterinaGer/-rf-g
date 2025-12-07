@@ -2,9 +2,8 @@ package searchengine.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import searchengine.model.SitesPageTable;
-
-import java.util.List;
+import searchengine.model.SiteTable;
 
 public interface PageRepository extends JpaRepository<SitesPageTable, Long> {
-    List<SitesPageTable> findBySiteId(Long siteId);
+    long countBySite(SiteTable site);
 }

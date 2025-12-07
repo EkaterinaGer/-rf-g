@@ -1,25 +1,32 @@
 package searchengine.controllers;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import searchengine.services.LemmaService;
+import org.springframework.web.bind.annotation.*;
+import searchengine.dto.responses.ResultDto;
+import searchengine.search.SearchStarter;
 
-import java.io.IOException;
-import java.util.Map;
+import java.util.List;
 
 @RestController
+@RequestMapping("/api")
 public class ApiController {
 
-    private final LemmaService lemmaService;
+    private final SearchStarter searchStarter;
 
-    public ApiController(LemmaService lemmaService) {
-        this.lemmaService = lemmaService;
+    public ApiController(SearchStarter searchStarter) {
+        this.searchStarter = searchStarter;
     }
 
+    @GetMapping("/search")
+    public List<ResultDto> search(
+            @RequestParam("query") String query,
+            @RequestParam(value = "site", required = false) String site,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "size", defaultValue = "10") int size) {
 
-    @GetMapping("/api/lemmas")
-    public Map<String, Integer> getLemmas(@RequestParam String text) throws IOException {
-        return lemmaService.getLemmas(text);
+        if (site != null && !site.isBlank()) {
+            return searchStarter.getSearchFromOneSite(query, site, page, size);
+        } else {
+            return searchStarter.getFullSearch(query, page, size);
+        }
     }
 }

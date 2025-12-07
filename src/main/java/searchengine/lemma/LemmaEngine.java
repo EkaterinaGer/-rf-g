@@ -5,21 +5,17 @@ import org.apache.lucene.analysis.ru.RussianLightStemmer;
 import java.util.HashMap;
 import java.util.Map;
 
-
 public class LemmaEngine {
 
-    private final RussianLightStemmer stemmer;
+    private static RussianLightStemmer stemmer = null;
 
     public LemmaEngine() {
         this.stemmer = new RussianLightStemmer();
     }
 
-
-    public Map<String, Integer> getLemmas(String text) {
+    public static Map<String, Integer> getLemmas(String text) {
         Map<String, Integer> lemmaCount = new HashMap<>();
-        if (text == null || text.isBlank()) {
-            return lemmaCount;
-        }
+        if (text == null || text.isBlank()) return lemmaCount;
 
         String normalized = text.toLowerCase().replaceAll("[^а-яё\\s]", " ");
         String[] words = normalized.split("\\s+");
@@ -31,5 +27,9 @@ public class LemmaEngine {
             lemmaCount.put(lemma, lemmaCount.getOrDefault(lemma, 0) + 1);
         }
         return lemmaCount;
+    }
+
+    public static Map<String, Integer> getLemmasStatic(String text) {
+        return new LemmaEngine().getLemmas(text);
     }
 }
