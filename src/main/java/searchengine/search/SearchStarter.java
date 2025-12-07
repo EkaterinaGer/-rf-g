@@ -2,39 +2,28 @@ package searchengine.search;
 
 import org.springframework.stereotype.Service;
 import searchengine.dto.SearchDto;
-import searchengine.model.Lemma;
-import searchengine.model.SiteTable;
-import searchengine.repository.SiteRepository;
+import searchengine.dto.responses.ResultDto;
 import searchengine.services.search.SearchService;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public record SearchStarter(SiteRepository siteRepository, SearchService searchService) {
+public record SearchStarter(SearchService searchService) {
 
-    public List<SearchDto> getSearchFromOneSite(String text,
-                                                String url,
-                                                int start,
-                                                int limit) {
-        SiteTable site = siteRepository.findByUrl(url);
-        List<String> textLemmaList = searchService.getLemmaFromSearchText(text);
-        List<Lemma> foundLemmaList = searchService.getLemmaFromSite(textLemmaList, site);
-        return searchService.createSearchDtoList(foundLemmaList, textLemmaList, start, limit);
+    public List<ResultDto> getSearchFromOneSite(String query, String siteUrl, int page, int size) {
+        SearchDto searchDto = new SearchDto();
+        searchDto.setQuery(query);
+        searchDto.setSite(siteUrl);
+        searchDto.setPage(page);
+        searchDto.setSize(size);
+        return searchService.search(searchDto);
     }
 
-    public List<SearchDto> getFullSearch(String text,
-                                         int start,
-                                         int limit) {
-        List<SiteTable> siteList = siteRepository.findAll();
-        List<SearchDto> result = new ArrayList<>();
-        List<Lemma> foundLemmaList = new ArrayList<>();
-        List<String> textLemmaList = searchService.getLemmaFromSearchText(text);
-
-        for (SiteTable site : siteList) {
-            foundLemmaList.addAll(searchService.getLemmaFromSite(textLemmaList, site));
-        }
-
-        return new ArrayList<>();
+    public List<ResultDto> getFullSearch(String query, int page, int size) {
+        SearchDto searchDto = new SearchDto();
+        searchDto.setQuery(query);
+        searchDto.setPage(page);
+        searchDto.setSize(size);
+        return searchService.search(searchDto);
     }
 }
