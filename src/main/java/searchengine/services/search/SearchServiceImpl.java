@@ -90,4 +90,35 @@ public class SearchServiceImpl implements SearchService {
         int end = Math.min(content.length(), start + maxLength);
         return content.substring(start, end) + (end < content.length() ? "..." : "");
     }
+
+    @Override
+    public void indexSite(String url) {
+        List<SitesPageTable> pagesToIndex = pageRepository.findBySite_Url(url);
+
+        for (SitesPageTable page : pagesToIndex) {
+            String content = page.getContent();
+            if (content == null || content.isBlank()) continue;
+
+            Map<String, Integer> lemmas = LemmaEngine.getLemmas(content);
+
+            for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
+                String lemmaStr = entry.getKey();
+                int frequency = entry.getValue();
+
+                Lemma lemma = lemmaRepository.findByLemma(lemmaStr)
+                        .orElseGet(() -> {
+                            Lemma newLemma = new Lemma();
+                            newLemma.setLemma(lemmaStr);
+                            newLemma.setFrequency(frequency);
+                            return lemmaRepository.save(newLemma);
+                        });
+
+                SearchIndex index = new SearchIndex();
+                index.setLemma(lemma);
+                index.setPage(page);
+                index.setRank(frequency);
+                indexRepository.save(index);
+            }
+        }
+    }
 }

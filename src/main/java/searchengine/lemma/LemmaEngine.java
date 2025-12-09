@@ -7,11 +7,12 @@ import java.util.Map;
 
 public class LemmaEngine {
 
-    private static RussianLightStemmer stemmer = null;
+    private static RussianLightStemmer stemmer;
 
     public LemmaEngine() {
         this.stemmer = new RussianLightStemmer();
     }
+
 
     public static Map<String, Integer> getLemmas(String text) {
         Map<String, Integer> lemmaCount = new HashMap<>();
@@ -29,7 +30,12 @@ public class LemmaEngine {
         return lemmaCount;
     }
 
-    public static Map<String, Integer> getLemmasStatic(String text) {
-        return new LemmaEngine().getLemmas(text);
+
+    public Map<String, Integer> getLemmasFromText(String html) {
+        if (html == null || html.isBlank()) return new HashMap<>();
+
+        // Убираем HTML-теги, оставляем только текст
+        String textOnly = html.replaceAll("<[^>]*>", " ");
+        return getLemmas(textOnly);
     }
 }
