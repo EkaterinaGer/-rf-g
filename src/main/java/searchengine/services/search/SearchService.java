@@ -6,4 +6,5 @@ import java.util.List;
 
 public interface SearchService {
     List<ResultDto> search(SearchDto searchDto);
+    void indexSite(String url);
 }
