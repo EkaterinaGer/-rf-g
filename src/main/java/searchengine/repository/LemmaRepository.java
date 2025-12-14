@@ -1,19 +1,14 @@
 package searchengine.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 import searchengine.model.Lemma;
-import searchengine.model.SiteTable;
 
 import java.util.List;
 import java.util.Optional;
 
-public interface LemmaRepository extends JpaRepository<Lemma, Long> {
-
-    // Находит лемму по строке
+@Repository
+public interface LemmaRepository extends JpaRepository<Lemma, Integer> {
     Optional<Lemma> findByLemma(String lemma);
-
-    // Если нужно подсчитать количество лемм для сайта
-    long countBySiteTable(SiteTable site);
-
     List<Lemma> findByLemmaIn(List<String> queryLemmas);
 }

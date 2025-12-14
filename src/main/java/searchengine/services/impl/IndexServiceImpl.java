@@ -17,14 +17,18 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 
-@Slf4j
 @Service
-@AllArgsConstructor
 public class IndexServiceImpl implements IndexService {
 
     private final LemmaService lemmaService;
     private final LemmaRepository lemmaRepository;
     private final IndexRepository indexRepository;
+    
+    public IndexServiceImpl(LemmaService lemmaService, LemmaRepository lemmaRepository, IndexRepository indexRepository) {
+        this.lemmaService = lemmaService;
+        this.lemmaRepository = lemmaRepository;
+        this.indexRepository = indexRepository;
+    }
 
     @Override
     public void indexHtml(String html, SitesPageTable indexingPage) {
@@ -34,10 +38,11 @@ public class IndexServiceImpl implements IndexService {
             try {
                 saveLemma(entry.getKey(), entry.getValue(), indexingPage);
             } catch (Exception e) {
-                log.error("Ошибка при сохранении леммы: " + entry.getKey(), e);
+                // Ошибка при сохранении леммы
+                System.err.println("Ошибка при сохранении леммы: " + entry.getKey() + " - " + e.getMessage());
             }
         });
-        log.info("Индексация страницы завершена за " + (System.currentTimeMillis() - start) + "ms, lemmas: " + lemmas.size());
+        System.out.println("Индексация страницы завершена за " + (System.currentTimeMillis() - start) + "ms, lemmas: " + lemmas.size());
     }
 
     @Transactional
@@ -53,7 +58,6 @@ public class IndexServiceImpl implements IndexService {
                 Lemma lemma = new Lemma();
                 lemma.setLemma(key);
                 lemma.setFrequency(value);
-                lemma.setSiteTable(indexingPage.getSite());
                 lemmaRepository.saveAndFlush(lemma);
                 createIndex(indexingPage, lemma, value);
             } catch (DataIntegrityViolationException e) {
@@ -65,13 +69,13 @@ public class IndexServiceImpl implements IndexService {
     private void createIndex(SitesPageTable indexingPage, Lemma lemmaInDB, Integer count) {
         SearchIndex searchIndexExists = indexRepository.findByPageIdAndLemmaId(indexingPage.getId(), lemmaInDB.getId());
         if (searchIndexExists != null) {
-            searchIndexExists.setRank(searchIndexExists.getRank() + count);
+            searchIndexExists.setRank(searchIndexExists.getRank() + count.floatValue());
             indexRepository.save(searchIndexExists);
         } else {
             SearchIndex index = new SearchIndex();
             index.setLemma(lemmaInDB);
             index.setPage(indexingPage);
-            index.setRank(count);
+            index.setRank(count.floatValue());
             indexRepository.save(index);
         }
     }

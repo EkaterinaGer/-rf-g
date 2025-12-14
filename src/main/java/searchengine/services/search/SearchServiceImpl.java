@@ -45,7 +45,7 @@ public class SearchServiceImpl implements SearchService {
         List<Lemma> lemmasFromDb = lemmaRepository.findByLemmaIn(queryLemmas);
         if (lemmasFromDb.isEmpty()) return Collections.emptyList();
 
-        List<Long> lemmaIds = lemmasFromDb.stream().map(Lemma::getId).collect(Collectors.toList());
+        List<Integer> lemmaIds = lemmasFromDb.stream().map(Lemma::getId).collect(Collectors.toList());
 
         List<SearchIndex> indices;
         if (siteFilter != null && !siteFilter.isBlank()) {
@@ -116,7 +116,7 @@ public class SearchServiceImpl implements SearchService {
                 SearchIndex index = new SearchIndex();
                 index.setLemma(lemma);
                 index.setPage(page);
-                index.setRank(frequency);
+                index.setRank((float) frequency);
                 indexRepository.save(index);
             }
         }

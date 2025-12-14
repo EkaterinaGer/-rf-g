@@ -13,7 +13,6 @@ import searchengine.repository.SiteRepository;
 import searchengine.services.IndexService;
 import searchengine.services.LemmaService;
 
-import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -62,9 +61,11 @@ public class SiteCrawler extends RecursiveAction {
         }
         SitesPageTable indexingSitesPageTable = new SitesPageTable();
         indexingSitesPageTable.setPath(page);
-        indexingSitesPageTable.setSiteId(siteDomain.getId());
+        indexingSitesPageTable.setSite(siteDomain);
         try {
-            org.jsoup.Connection connect = Jsoup.connect(siteDomain.getUrl() + page).userAgent(connection.getUserAgent()).referrer(connection.getReferer());
+            org.jsoup.Connection connect = Jsoup.connect(siteDomain.getUrl() + page)
+                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .referrer("http://www.google.com");
             Document doc = connect.timeout(60000).get();
             indexingSitesPageTable.setContent(doc.head() + String.valueOf(doc.body()));
             Elements pages = doc.getElementsByTag("a");
@@ -108,7 +109,7 @@ public class SiteCrawler extends RecursiveAction {
         }
         resultForkJoinPoolIndexedPages.putIfAbsent(indexingSitesPageTable.getPath(), indexingSitesPageTable);
         SiteTable siteTable = siteRepository.findById(siteDomain.getId()).orElseThrow();
-        siteTable.setStatusTime(Timestamp.valueOf(LocalDateTime.now()));
+        siteTable.setStatusTime(LocalDateTime.now());
         siteRepository.save(siteTable);
         pageRepository.save(indexingSitesPageTable);
         indexService.indexHtml(indexingSitesPageTable.getContent(), indexingSitesPageTable);

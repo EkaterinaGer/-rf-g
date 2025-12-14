@@ -13,4 +13,13 @@ import java.util.List;
 @ConfigurationProperties(prefix = "indexing-settings")
 public class SitesList {
     private List<Site> sites;
+    
+    // Явный геттер для совместимости
+    public List<Site> getSites() {
+        return sites;
+    }
+    
+    public void setSites(List<Site> sites) {
+        this.sites = sites;
+    }
 }

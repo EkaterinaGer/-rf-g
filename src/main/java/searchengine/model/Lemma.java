@@ -8,21 +8,26 @@ public class Lemma {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
+    @Column(columnDefinition = "VARCHAR(255)", unique = true)
     private String lemma;
 
-    private int frequency;
+    private Integer frequency;
 
     public Lemma() {}
 
-    public Lemma(String lemma, int frequency) {
+    public Lemma(String lemma, Integer frequency) {
         this.lemma = lemma;
         this.frequency = frequency;
     }
 
-    public Long getId() {
+    public Integer getId() {
         return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
     }
 
     public String getLemma() {
@@ -33,15 +38,11 @@ public class Lemma {
         this.lemma = lemma;
     }
 
-    public int getFrequency() {
+    public Integer getFrequency() {
         return frequency;
     }
 
-    public void setFrequency(int frequency) {
+    public void setFrequency(Integer frequency) {
         this.frequency = frequency;
-    }
-
-    public void setSiteTable(SiteTable site) {
-
     }
 }

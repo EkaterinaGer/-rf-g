@@ -1,10 +1,10 @@
 package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import searchengine.config.Connection;
+
 import searchengine.config.Site;
 import searchengine.config.SitesList;
+import searchengine.config.Connection;
 import searchengine.model.SitesPageTable;
 import searchengine.model.SiteTable;
 import searchengine.model.SiteStatusType;
@@ -20,8 +20,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
-@Service
-@RequiredArgsConstructor
+//@Service
 public class ApiServiceImpl implements ApiService {
 
     private final SiteRepository siteRepository;
@@ -30,6 +29,17 @@ public class ApiServiceImpl implements ApiService {
     private final Connection connection;
     private final LemmaService lemmaService;
     private final IndexService indexService;
+    
+    public ApiServiceImpl(SiteRepository siteRepository, PageRepository pageRepository,
+                         SitesList indexingSites, Connection connection,
+                         LemmaService lemmaService, IndexService indexService) {
+        this.siteRepository = siteRepository;
+        this.pageRepository = pageRepository;
+        this.indexingSites = indexingSites;
+        this.connection = connection;
+        this.lemmaService = lemmaService;
+        this.indexService = indexService;
+    }
 
     private AtomicBoolean indexingProcessing;
     private final Logger logger = Logger.getLogger(ApiServiceImpl.class.getName());
@@ -66,19 +76,24 @@ public class ApiServiceImpl implements ApiService {
     }
 
     private void deleteDataInDB() {
-        List<String> siteUrls = indexingSites.getSites().stream()
-                .map(site -> site.getUrl().toString())
-                .toList();
+        List<String> siteUrls = indexingSites.getSites() != null ? 
+                indexingSites.getSites().stream()
+                        .map(site -> site.getUrl() != null ? site.getUrl().toString() : "")
+                        .filter(url -> !url.isEmpty())
+                        .toList() : 
+                List.of();
         siteRepository.deleteAll(siteRepository.findByUrlIn(siteUrls));
     }
 
     private void addSitesToDB() {
-        for (Site siteApp : indexingSites.getSites()) {
-            SiteTable siteTable = new SiteTable();
-            siteTable.setStatus(SiteStatusType.INDEXING); // исправлено
-            siteTable.setName(siteApp.getName());
-            siteTable.setUrl(siteApp.getUrl().toString());
-            siteRepository.save(siteTable);
+        if (indexingSites.getSites() != null) {
+            for (Site siteApp : indexingSites.getSites()) {
+                SiteTable siteTable = new SiteTable();
+                siteTable.setStatus(SiteStatusType.INDEXING);
+                siteTable.setName(siteApp.getName() != null ? siteApp.getName() : "");
+                siteTable.setUrl(siteApp.getUrl() != null ? siteApp.getUrl().toString() : "");
+                siteRepository.save(siteTable);
+            }
         }
     }
 

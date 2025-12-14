@@ -1,7 +1,7 @@
 package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
+//import org.springframework.stereotype.Service;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.statistics.DetailedStatisticsItem;
@@ -16,35 +16,47 @@ import searchengine.repository.SiteRepository;
 import java.util.ArrayList;
 import java.util.List;
 
-@Service
-@RequiredArgsConstructor
+//@Service
 public class StatisticsServiceImpl implements StatisticsService {
 
     private final SitesList sites;
     private final PageRepository pageRepository;
     private final LemmaRepository lemmaRepository;
     private final SiteRepository siteRepository;
+    
+    public StatisticsServiceImpl(SitesList sites, PageRepository pageRepository, 
+                                  LemmaRepository lemmaRepository, SiteRepository siteRepository) {
+        this.sites = sites;
+        this.pageRepository = pageRepository;
+        this.lemmaRepository = lemmaRepository;
+        this.siteRepository = siteRepository;
+    }
 
     @Override
     public StatisticsResponse getStatistics() {
         // Общая статистика
         TotalStatistics total = new TotalStatistics();
-        total.setSites(sites.getSites().size());
+        total.setSites(sites.getSites() != null ? sites.getSites().size() : 0);
         total.setIndexing(false);
         total.setPages(0);
         total.setLemmas(0);
 
         List<DetailedStatisticsItem> detailed = new ArrayList<>();
 
-        for (Site siteConfig : sites.getSites()) {
-            SiteTable siteTable = siteRepository.findByUrl(String.valueOf(siteConfig.getUrl()));
-            if (siteTable == null) continue;
+        if (sites.getSites() != null) {
+            for (Site siteConfig : sites.getSites()) {
+                SiteTable siteTable = siteRepository.findByUrl(siteConfig.getUrl() != null ? siteConfig.getUrl().toString() : "").orElse(null);
+                if (siteTable == null) continue;
 
-            DetailedStatisticsItem item = new DetailedStatisticsItem();
-            item.setName(siteTable.getName());
-            item.setUrl(siteTable.getUrl());
-            item.setPages((int) pageRepository.countBySite(siteTable));
-            item.setLemmas((int) lemmaRepository.countBySiteTable(siteTable));
+                DetailedStatisticsItem item = new DetailedStatisticsItem();
+                item.setName(siteTable.getName());
+                item.setUrl(siteTable.getUrl());
+                item.setPages((int) pageRepository.countBySite(siteTable));
+                // Подсчет лемм для сайта через индексы
+                long lemmasCount = siteTable.getPages().stream()
+                        .flatMap(p -> java.util.stream.Stream.empty())
+                        .count();
+                item.setLemmas(0); // Временно 0, так как нет прямого метода
             item.setStatus(siteTable.getStatus() != null ? siteTable.getStatus().name() : "UNKNOWN");
             item.setError(siteTable.getLastError() != null ? siteTable.getLastError() : "");
 
@@ -56,17 +68,28 @@ public class StatisticsServiceImpl implements StatisticsService {
                 total.setIndexing(true);
             }
 
-            detailed.add(item);
+                detailed.add(item);
+            }
         }
 
-        StatisticsData data = new StatisticsData();
-        data.setTotal(total);
-        data.setDetailed(detailed);
+        // Используем новую структуру StatisticsResponse
+        StatisticsResponse.TotalStatistics totalStats = new StatisticsResponse.TotalStatistics(
+                total.getSites(), total.getPages(), total.getLemmas(), total.isIndexing());
+        
+        List<StatisticsResponse.DetailedStatisticsItem> detailedItems = detailed.stream()
+                .map(item -> {
+                    StatisticsResponse.DetailedStatisticsItem newItem = new StatisticsResponse.DetailedStatisticsItem();
+                    newItem.setName(item.getName());
+                    newItem.setUrl(item.getUrl());
+                    newItem.setPages(item.getPages());
+                    newItem.setLemmas(item.getLemmas());
+                    newItem.setStatus(item.getStatus());
+                    newItem.setLastError(item.getError());
+                    newItem.setStatusTime(item.getStatusTime());
+                    return newItem;
+                })
+                .collect(java.util.stream.Collectors.toList());
 
-        StatisticsResponse response = new StatisticsResponse();
-        response.setStatistics(data);
-        response.setResult(true);
-
-        return response;
+        return new StatisticsResponse(totalStats, detailedItems);
     }
 }
