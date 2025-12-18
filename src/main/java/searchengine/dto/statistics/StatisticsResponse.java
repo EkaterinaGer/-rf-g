@@ -1,5 +1,6 @@
 package searchengine.dto.statistics;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 public class StatisticsResponse {
@@ -70,6 +71,7 @@ public class StatisticsResponse {
             this.lemmas = lemmas;
         }
         
+        @JsonProperty("isIndexing")
         public boolean isIndexing() {
             return isIndexing;
         }
@@ -85,6 +87,7 @@ public class StatisticsResponse {
         private String status;
         private long statusTime;
         private String lastError;
+        private String error;
         private int pages;
         private int lemmas;
         
@@ -129,6 +132,14 @@ public class StatisticsResponse {
         
         public void setLastError(String lastError) {
             this.lastError = lastError;
+        }
+        
+        public String getError() {
+            return error;
+        }
+        
+        public void setError(String error) {
+            this.error = error;
         }
         
         public int getPages() {

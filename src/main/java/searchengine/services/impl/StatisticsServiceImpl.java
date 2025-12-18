@@ -1,7 +1,7 @@
 package searchengine.services.impl;
 
 import lombok.RequiredArgsConstructor;
-//import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Service;
 import searchengine.config.Site;
 import searchengine.config.SitesList;
 import searchengine.dto.statistics.DetailedStatisticsItem;
@@ -16,7 +16,7 @@ import searchengine.repository.SiteRepository;
 import java.util.ArrayList;
 import java.util.List;
 
-//@Service
+@Service
 public class StatisticsServiceImpl implements StatisticsService {
 
     private final SitesList sites;
@@ -85,6 +85,7 @@ public class StatisticsServiceImpl implements StatisticsService {
                     newItem.setLemmas(item.getLemmas());
                     newItem.setStatus(item.getStatus());
                     newItem.setLastError(item.getError());
+                    newItem.setError(item.getError());
                     newItem.setStatusTime(item.getStatusTime());
                     return newItem;
                 })

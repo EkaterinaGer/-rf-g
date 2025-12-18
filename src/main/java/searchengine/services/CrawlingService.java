@@ -3,13 +3,14 @@ package searchengine.services;
 import searchengine.model.*;
 import searchengine.repository.*;
 import searchengine.util.Lemmatizer;
+import searchengine.config.SitesList;
+import searchengine.config.Site;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,23 +24,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class CrawlingService {
     private static final Logger logger = LoggerFactory.getLogger(CrawlingService.class);
     
-    @Autowired
-    private SiteRepository siteRepository;
-    
-    @Autowired
-    private PageRepository pageRepository;
-    
-    @Autowired
-    private LemmaRepository lemmaRepository;
-    
-    @Autowired
-    private IndexRepository indexRepository;
-    
-    @Autowired
-    private IndexingService indexingService;
+    private final SiteRepository siteRepository;
+    private final PageRepository pageRepository;
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
+    private final IndexingService indexingService;
+    private final SitesList sitesList;
     
     private final Lemmatizer lemmatizer = new Lemmatizer();
     private final Map<String, AtomicBoolean> stopFlags = new ConcurrentHashMap<>();
+    
+    public CrawlingService(SiteRepository siteRepository, PageRepository pageRepository,
+                           LemmaRepository lemmaRepository, IndexRepository indexRepository,
+                           IndexingService indexingService, SitesList sitesList) {
+        this.siteRepository = siteRepository;
+        this.pageRepository = pageRepository;
+        this.lemmaRepository = lemmaRepository;
+        this.indexRepository = indexRepository;
+        this.indexingService = indexingService;
+        this.sitesList = sitesList;
+    }
     
     /**
      * Запускает индексацию сайта
@@ -85,6 +89,17 @@ public class CrawlingService {
                 stopFlags.remove(siteUrl);
             }
         });
+    }
+    
+    /**
+     * Запускает индексацию всех сайтов из конфигурации
+     */
+    public void startIndexing() {
+        if (sitesList != null && sitesList.getSites() != null) {
+            for (Site site : sitesList.getSites()) {
+                startIndexing(site.getUrl().toString());
+            }
+        }
     }
     
     /**
@@ -258,4 +273,3 @@ public class CrawlingService {
         }
     }
 }
-

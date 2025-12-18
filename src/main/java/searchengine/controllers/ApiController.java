@@ -1,168 +1,101 @@
 package searchengine.controllers;
 
+import org.springframework.web.bind.annotation.*;
 import searchengine.dto.statistics.StatisticsResponse;
-import searchengine.model.*;
-import searchengine.repository.*;
+import searchengine.model.SearchResult;
 import searchengine.services.CrawlingService;
 import searchengine.services.IndexingService;
 import searchengine.services.SearchServiceNew;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import searchengine.services.StatisticsService;
 
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api")
 public class ApiController {
-    private static final Logger logger = LoggerFactory.getLogger(ApiController.class);
-    
-    @Autowired
-    private CrawlingService crawlingService;
-    
-    @Autowired
-    private IndexingService indexingService;
-    
-    @Autowired
-    private SearchServiceNew searchService;
-    
-    @Autowired
-    private SiteRepository siteRepository;
-    
-    @Autowired
-    private PageRepository pageRepository;
-    
-    @Autowired
-    private LemmaRepository lemmaRepository;
-    
-    @Autowired
-    private IndexRepository indexRepository;
-    
+
+    private final CrawlingService crawlingService;
+    private final IndexingService indexingService;
+    private final SearchServiceNew searchService;
+    private final StatisticsService statisticsService;
+
+    public ApiController(CrawlingService crawlingService, IndexingService indexingService,
+                         SearchServiceNew searchService, StatisticsService statisticsService) {
+        this.crawlingService = crawlingService;
+        this.indexingService = indexingService;
+        this.searchService = searchService;
+        this.statisticsService = statisticsService;
+    }
+
     /**
-     * Запуск индексации сайта
+     * Запуск индексации (GET/POST)
      */
     @PostMapping("/startIndexing")
-    public ResponseEntity<Map<String, Object>> startIndexing(@RequestParam String url) {
-        try {
+    public Map<String, Object> startIndexingPost(@RequestParam(required = false) String url) {
+        if (url != null && !url.isBlank()) {
             crawlingService.startIndexing(url);
-            return ResponseEntity.ok(Map.of("result", true));
-        } catch (Exception e) {
-            logger.error("Ошибка при запуске индексации: {}", e.getMessage(), e);
-            return ResponseEntity.ok(Map.of("result", false, "error", e.getMessage()));
+        } else {
+            crawlingService.startIndexing();
         }
+        return Map.of("result", true);
     }
-    
+
+    @GetMapping("/startIndexing")
+    public Map<String, Object> startIndexingGet(@RequestParam(required = false) String url) {
+        if (url != null && !url.isBlank()) {
+            crawlingService.startIndexing(url);
+        } else {
+            crawlingService.startIndexing();
+        }
+        return Map.of("result", true);
+    }
+
     /**
-     * Остановка индексации
+     * Остановка индексации (GET/POST)
      */
     @PostMapping("/stopIndexing")
-    public ResponseEntity<Map<String, Object>> stopIndexing() {
-        try {
-            crawlingService.stopIndexing();
-            return ResponseEntity.ok(Map.of("result", true));
-        } catch (Exception e) {
-            logger.error("Ошибка при остановке индексации: {}", e.getMessage(), e);
-            return ResponseEntity.ok(Map.of("result", false, "error", e.getMessage()));
-        }
+    public Map<String, Object> stopIndexingPost() {
+        crawlingService.stopIndexing();
+        return Map.of("result", true);
     }
-    
+
+    @GetMapping("/stopIndexing")
+    public Map<String, Object> stopIndexingGet() {
+        crawlingService.stopIndexing();
+        return Map.of("result", true);
+    }
+
     /**
      * Индексация отдельной страницы
      */
     @PostMapping("/indexPage")
-    public ResponseEntity<Map<String, Object>> indexPage(@RequestParam String url) {
-        try {
-            // Определяем сайт по URL
-            String siteUrl = extractSiteUrl(url);
-            indexingService.indexPage(url, siteUrl);
-            return ResponseEntity.ok(Map.of("result", true));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.ok(Map.of("result", false, "error", e.getMessage()));
-        } catch (Exception e) {
-            logger.error("Ошибка при индексации страницы: {}", e.getMessage(), e);
-            return ResponseEntity.ok(Map.of("result", false, "error", e.getMessage()));
-        }
+    public Map<String, Object> indexPage(@RequestParam String url) {
+        indexingService.indexPage(url);
+        return Map.of("result", true);
     }
-    
+
     /**
      * Поиск
      */
     @GetMapping("/search")
-    public ResponseEntity<Map<String, Object>> search(
-            @RequestParam String query,
-            @RequestParam(required = false) String site) {
-        try {
-            List<SearchResult> results = searchService.search(query, site);
-            return ResponseEntity.ok(Map.of(
-                    "result", true,
-                    "count", results.size(),
-                    "data", results
-            ));
-        } catch (Exception e) {
-            logger.error("Ошибка при поиске: {}", e.getMessage(), e);
-            return ResponseEntity.ok(Map.of("result", false, "error", e.getMessage()));
-        }
+    public Map<String, Object> search(@RequestParam String query,
+                                      @RequestParam(required = false) String site) {
+        List<SearchResult> results = searchService.search(query, site);
+        return Map.of(
+                "result", true,
+                "count", results.size(),
+                "data", results
+        );
     }
-    
+
     /**
      * Статистика
      */
     @GetMapping("/statistics")
-    public ResponseEntity<StatisticsResponse> statistics() {
-        List<SiteTable> sites = siteRepository.findAll();
-        long totalPages = pageRepository.count();
-        long totalLemmas = lemmaRepository.count();
-        boolean isIndexing = sites.stream()
-                .anyMatch(s -> s.getStatus() == SiteStatusType.INDEXING);
-        
-        StatisticsResponse.TotalStatistics total = new StatisticsResponse.TotalStatistics(
-                sites.size(),
-                (int) totalPages,
-                (int) totalLemmas,
-                isIndexing
-        );
-        
-        List<StatisticsResponse.DetailedStatisticsItem> detailed = sites.stream()
-                .map(site -> {
-                    StatisticsResponse.DetailedStatisticsItem item = new StatisticsResponse.DetailedStatisticsItem();
-                    item.setUrl(site.getUrl());
-                    item.setName(site.getName());
-                    item.setStatus(site.getStatus().name());
-                    item.setStatusTime(site.getStatusTime() != null ?
-                            site.getStatusTime().toEpochSecond(ZoneOffset.UTC) : 0);
-                    item.setLastError(site.getLastError());
-                    
-                    long pagesCount = pageRepository.findAll().stream()
-                            .filter(p -> p.getSite().equals(site))
-                            .count();
-                    item.setPages((int) pagesCount);
-                    
-                    // Подсчитываем уникальные леммы для сайта
-                    long lemmasCount = indexRepository.findAll().stream()
-                            .filter(idx -> idx.getPage().getSite().equals(site))
-                            .map(idx -> idx.getLemma().getId())
-                            .distinct()
-                            .count();
-                    item.setLemmas((int) lemmasCount);
-                    
-                    return item;
-                })
-                .collect(Collectors.toList());
-        
-        return ResponseEntity.ok(new StatisticsResponse(total, detailed));
+    public Map<String, Object> statistics() {
+        StatisticsResponse stats = statisticsService.getStatistics();
+        return Map.of("result", true, "statistics", stats);
     }
     
-    private String extractSiteUrl(String pageUrl) {
-        try {
-            java.net.URI uri = new java.net.URI(pageUrl);
-            return uri.getScheme() + "://" + uri.getHost();
-        } catch (Exception e) {
-            throw new IllegalArgumentException("Некорректный URL");
-        }
-    }
 }

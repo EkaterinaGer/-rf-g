@@ -4,8 +4,8 @@ server:
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/searchengine
-    username: root
-    password: 123456789
+    username: shadownight
+    password:
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -26,3 +26,12 @@ logging:
     org.springframework.web: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+indexing-settings:
+  sites:
+    - url: https://www.lenta.ru
+      name: Lenta.ru
+    - url: https://www.skillbox.ru
+      name: Skillbox
+    - url: https://www.playback.ru
+      name: Playback

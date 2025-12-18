@@ -7,7 +7,6 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,49 +20,40 @@ import java.util.Optional;
 public class IndexingService {
     private static final Logger logger = LoggerFactory.getLogger(IndexingService.class);
     
-    @Autowired
-    private SiteRepository siteRepository;
-    
-    @Autowired
-    private PageRepository pageRepository;
-    
-    @Autowired
-    private LemmaRepository lemmaRepository;
-    
-    @Autowired
-    private IndexRepository indexRepository;
+    private final SiteRepository siteRepository;
+    private final PageRepository pageRepository;
+    private final LemmaRepository lemmaRepository;
+    private final IndexRepository indexRepository;
     
     private final Lemmatizer lemmatizer = new Lemmatizer();
+    
+    public IndexingService(SiteRepository siteRepository, PageRepository pageRepository,
+                           LemmaRepository lemmaRepository, IndexRepository indexRepository) {
+        this.siteRepository = siteRepository;
+        this.pageRepository = pageRepository;
+        this.lemmaRepository = lemmaRepository;
+        this.indexRepository = indexRepository;
+    }
     
     /**
      * Индексирует отдельную страницу
      */
     @Transactional
-    public void indexPage(String url, String siteUrl) {
+    public void indexPage(String url) {
         try {
-            // Проверяем, что страница принадлежит указанному сайту
+            String siteUrl = extractSiteUrl(url);
             if (!url.startsWith(siteUrl)) {
                 throw new IllegalArgumentException("Страница не принадлежит указанному сайту");
             }
             
-            // Получаем или создаем сайт
             SiteTable site = siteRepository.findByUrl(siteUrl)
-                    .orElseGet(() -> {
-                        SiteTable newSite = new SiteTable(siteUrl, extractSiteName(siteUrl));
-                        return siteRepository.save(newSite);
-                    });
+                    .orElseGet(() -> siteRepository.save(new SiteTable(siteUrl, extractSiteName(siteUrl))));
             
-            // Извлекаем путь страницы
             String path = extractPath(url, siteUrl);
             
-            // Проверяем, существует ли страница
             Optional<SitesPageTable> existingPage = pageRepository.findBySiteAndPath(site, path);
-            if (existingPage.isPresent()) {
-                // Удаляем старую информацию
-                deletePageData(existingPage.get());
-            }
+            existingPage.ifPresent(this::deletePageData);
             
-            // Загружаем страницу
             Document doc = Jsoup.connect(url)
                     .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .referrer("http://www.google.com")
@@ -71,8 +61,6 @@ public class IndexingService {
                     .get();
             
             int statusCode = doc.connection().response().statusCode();
-            
-            // Сохраняем только страницы с успешными кодами
             if (statusCode >= 400) {
                 logger.warn("Пропущена страница с кодом ошибки {}: {}", statusCode, url);
                 return;
@@ -81,35 +69,22 @@ public class IndexingService {
             String html = doc.html();
             String cleanText = lemmatizer.cleanHtml(html);
             
-            // Создаем запись страницы
-            SitesPageTable page = new SitesPageTable(site, path, statusCode, html);
-            page = pageRepository.save(page);
+            SitesPageTable page = pageRepository.save(new SitesPageTable(site, path, statusCode, html));
             
-            // Получаем леммы
             Map<String, Integer> lemmas = lemmatizer.getLemmas(cleanText);
-            
-            // Сохраняем леммы и индексы
             for (Map.Entry<String, Integer> entry : lemmas.entrySet()) {
                 String lemmaText = entry.getKey();
                 Integer count = entry.getValue();
                 
-                // Получаем или создаем лемму
                 Lemma lemma = lemmaRepository.findByLemma(lemmaText)
-                        .orElseGet(() -> {
-                            Lemma newLemma = new Lemma(lemmaText, 0);
-                            return lemmaRepository.save(newLemma);
-                        });
+                        .orElseGet(() -> lemmaRepository.save(new Lemma(lemmaText, 0)));
                 
-                // Увеличиваем frequency только если это новая страница для этой леммы
-                if (!indexRepository.findByPage(page).stream()
-                        .anyMatch(idx -> idx.getLemma().equals(lemma))) {
+                if (indexRepository.findByPage(page).stream().noneMatch(idx -> idx.getLemma().equals(lemma))) {
                     lemma.setFrequency(lemma.getFrequency() + 1);
                     lemmaRepository.save(lemma);
                 }
                 
-                // Создаем запись в индексе
-                SearchIndex index = new SearchIndex(page, lemma, count.floatValue());
-                indexRepository.save(index);
+                indexRepository.save(new SearchIndex(page, lemma, count.floatValue()));
             }
             
             logger.info("Страница проиндексирована: {}", url);
@@ -123,17 +98,11 @@ public class IndexingService {
         }
     }
     
-    /**
-     * Удаляет данные страницы из всех таблиц
-     */
     @Transactional
     private void deletePageData(SitesPageTable page) {
-        // Удаляем индексы
         indexRepository.findByPage(page).forEach(index -> {
             Lemma lemma = index.getLemma();
             indexRepository.delete(index);
-            
-            // Уменьшаем frequency леммы
             lemma.setFrequency(Math.max(0, lemma.getFrequency() - 1));
             if (lemma.getFrequency() == 0) {
                 lemmaRepository.delete(lemma);
@@ -141,14 +110,9 @@ public class IndexingService {
                 lemmaRepository.save(lemma);
             }
         });
-        
-        // Удаляем страницу
         pageRepository.delete(page);
     }
     
-    /**
-     * Извлекает имя сайта из URL
-     */
     private String extractSiteName(String url) {
         try {
             URI uri = new URI(url);
@@ -162,28 +126,29 @@ public class IndexingService {
         }
     }
     
-    /**
-     * Извлекает путь страницы относительно сайта
-     */
+    private String extractSiteUrl(String pageUrl) {
+        try {
+            URI uri = new URI(pageUrl);
+            return uri.getScheme() + "://" + uri.getHost();
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Некорректный URL");
+        }
+    }
+    
     private String extractPath(String pageUrl, String siteUrl) {
         try {
-            URI siteUri = new URI(siteUrl);
             URI pageUri = new URI(pageUrl);
-            
             String path = pageUri.getPath();
             if (path == null || path.isEmpty()) {
                 path = "/";
             }
-            
             String query = pageUri.getQuery();
             if (query != null && !query.isEmpty()) {
                 path += "?" + query;
             }
-            
             return path;
         } catch (URISyntaxException e) {
             return pageUrl.replace(siteUrl, "");
         }
     }
 }
-
