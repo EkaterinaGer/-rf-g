@@ -53,6 +53,20 @@ public class SearchServiceNew {
             return Collections.emptyList();
         }
         
+        // 2. Расширяем запрос формами слов для лучшего поиска
+        Set<String> expandedQueryTerms = new HashSet<>();
+        Set<String> queryWords = extractWordsFromQuery(query);
+        
+        // Добавляем все формы для каждого слова
+        for (String word : queryWords) {
+            expandedQueryTerms.addAll(lemmatizer.findWordForms(word));
+        }
+        
+        // Добавляем леммы
+        expandedQueryTerms.addAll(queryLemmaStrings);
+        
+        logger.info("Расширенный набор терминов для поиска: {}", expandedQueryTerms);
+        
         // Получаем общее количество страниц для расчета процента
         long totalPages = siteUrl != null 
             ? pageRepository.findAll().stream()
@@ -64,12 +78,12 @@ public class SearchServiceNew {
             return Collections.emptyList();
         }
         
-        // 2. Находим леммы в БД и исключаем те, что встречаются на слишком большом количестве страниц
+        // 3. Находим леммы в БД и исключаем те, что встречаются на слишком большом количестве страниц
         // Если страниц мало (меньше 10), не применяем фильтр по проценту
         boolean applyPercentageFilter = totalPages >= 10;
         
         List<Lemma> foundLemmas = new ArrayList<>();
-        for (String lemmaText : queryLemmaStrings) {
+        for (String lemmaText : expandedQueryTerms) {
             Optional<Lemma> lemmaOpt = lemmaRepository.findByLemma(lemmaText);
             if (lemmaOpt.isPresent()) {
                 Lemma lemma = lemmaOpt.get();
@@ -100,6 +114,7 @@ public class SearchServiceNew {
         
         if (foundLemmas.isEmpty()) {
             logger.warn("Не найдено подходящих лемм после фильтрации. Запрос: '{}', извлеченные леммы: {}", query, queryLemmaStrings);
+            // Пробуем найти хотя бы одну лемму из исходного запроса
             for (String lemmaText : queryLemmaStrings) {
                 Optional<Lemma> lemmaOpt = lemmaRepository.findByLemma(lemmaText);
                 if (lemmaOpt.isPresent()) {
@@ -108,17 +123,32 @@ public class SearchServiceNew {
                     break; 
                 }
             }
+            // Если все еще ничего не найдено, пробуем формы слов
+            if (foundLemmas.isEmpty()) {
+                for (String word : queryWords) {
+                    var wordForms = lemmatizer.findWordForms(word);
+                    for (String form : wordForms) {
+                        Optional<Lemma> lemmaOpt = lemmaRepository.findByLemma(form);
+                        if (lemmaOpt.isPresent()) {
+                            foundLemmas.add(lemmaOpt.get());
+                            logger.info("Добавлена форма слова '{}' без фильтрации", form);
+                            break;
+                        }
+                    }
+                    if (!foundLemmas.isEmpty()) break;
+                }
+            }
             if (foundLemmas.isEmpty()) {
                 return Collections.emptyList();
             }
         }
         
-        // 3. Сортируем леммы по возрастанию частоты (от самых редких к самым частым)
+        // 4. Сортируем леммы по возрастанию частоты (от самых редких к самым частым)
         foundLemmas.sort(Comparator.comparingInt(Lemma::getFrequency));
         
         logger.info("Найдено {} лемм после фильтрации, отсортировано по частоте", foundLemmas.size());
         
-        // 4. Находим страницы для самой редкой леммы
+        // 5. Находим страницы для самой редкой леммы
         Lemma firstLemma = foundLemmas.get(0);
         Set<SitesPageTable> candidatePages = indexRepository.findByLemma(firstLemma).stream()
             .map(SearchIndex::getPage)
@@ -130,7 +160,7 @@ public class SearchServiceNew {
             return Collections.emptyList();
         }
         
-        // 5. Для каждой следующей леммы находим страницы, которые есть и в предыдущем списке
+        // 6. Для каждой следующей леммы находим страницы, которые есть и в предыдущем списке
         for (int i = 1; i < foundLemmas.size(); i++) {
             Lemma lemma = foundLemmas.get(i);
             Set<SitesPageTable> pagesForLemma = indexRepository.findByLemma(lemma).stream()
@@ -141,7 +171,7 @@ public class SearchServiceNew {
             // Пересечение: оставляем только страницы, которые есть в обоих множествах
             candidatePages.retainAll(pagesForLemma);
             
-            // 6. Если страниц не осталось, но это не последняя лемма - продолжаем с оставшимися
+            // 7. Если страниц не осталось, но это не последняя лемма - продолжаем с оставшимися
             if (candidatePages.isEmpty() && i < foundLemmas.size() - 1) {
                 logger.info("Не осталось страниц после обработки леммы {}, продолжаем поиск", lemma.getLemma());
                 // Продолжаем с оставшимися леммами, но используем страницы из предыдущей леммы
@@ -158,7 +188,7 @@ public class SearchServiceNew {
         
         logger.debug("Найдено {} страниц-кандидатов", candidatePages.size());
         
-        // 7. Рассчитываем абсолютную релевантность для каждой страницы
+        // 8. Рассчитываем абсолютную релевантность для каждой страницы
         Map<SitesPageTable, Double> absoluteRelevance = new HashMap<>();
         
         for (SitesPageTable page : candidatePages) {
@@ -180,7 +210,7 @@ public class SearchServiceNew {
             .max()
             .orElse(1.0);
         
-        // 8. Рассчитываем относительную релевантность и создаем результаты
+        // 9. Рассчитываем относительную релевантность и создаем результаты
         List<SearchResult> results = new ArrayList<>();
         for (Map.Entry<SitesPageTable, Double> entry : absoluteRelevance.entrySet()) {
             SitesPageTable page = entry.getKey();
@@ -192,12 +222,12 @@ public class SearchServiceNew {
             
             String uri = page.getSite().getUrl() + page.getPath();
             String title = extractTitle(page.getContent());
-            String snippet = createSnippet(page.getContent(), query, queryLemmaStrings);
+            String snippet = createSnippet(page.getContent(), query, expandedQueryTerms);
             
             results.add(new SearchResult(uri, title, snippet, relativeRelevance));
         }
         
-        // 9. Сортируем по убыванию относительной релевантности
+        // 10. Сортируем по убыванию относительной релевантности
         results.sort((a, b) -> Double.compare(b.getRelevance(), a.getRelevance()));
         
         logger.info("Найдено {} результатов поиска", results.size());
@@ -246,46 +276,170 @@ public class SearchServiceNew {
             // Удаляем script и style
             doc.select("script, style").remove();
             
-            // Получаем текст из body
-            String text = doc.body() != null ? doc.body().text() : doc.text();
+            // Получаем очищенный текст
+            String cleanText = doc.body() != null ? doc.body().text() : doc.text();
             
-            if (text == null || text.isEmpty()) {
+            if (cleanText == null || cleanText.isEmpty()) {
                 return "";
             }
             
-            // Ищем первое вхождение любого из слов запроса (в нижнем регистре)
-            String lowerText = text.toLowerCase();
-            int snippetStart = -1;
-            int snippetLength = 200;
+            // Получаем все слова из оригинального запроса для выделения
+            Set<String> queryWords = extractWordsFromQuery(query);
             
-            for (String lemma : queryLemmas) {
-                int pos = lowerText.indexOf(lemma.toLowerCase());
+            // Расширяем поиск: добавляем все формы слов из запроса
+            Set<String> searchTerms = new HashSet<>();
+            searchTerms.addAll(queryWords);
+            
+            // Добавляем все формы каждого слова из запроса
+            for (String word : queryWords) {
+                searchTerms.addAll(lemmatizer.findWordForms(word));
+            }
+            
+            // Добавляем леммы для дополнительного поиска
+            searchTerms.addAll(queryLemmas);
+            
+            logger.info("Поиск в сниппете по терминам: {}", searchTerms);
+            
+            // Ищем лучшее место для сниппета в очищенном тексте
+            String lowerText = cleanText.toLowerCase();
+            int snippetStart = -1;
+            int snippetLength = 300;
+            int bestPos = -1;
+            String bestTerm = "";
+            String foundWord = ""; // Сохраняем найденное слово для выделения
+            
+            // Сначала ищем точные вхождения слов из запроса
+            for (String word : queryWords) {
+                int pos = lowerText.indexOf(word.toLowerCase());
                 if (pos != -1) {
-                    snippetStart = Math.max(0, pos - 50);
+                    bestPos = pos;
+                    bestTerm = word;
+                    foundWord = word;
+                    logger.info("Найдено точное вхождение слова '{}' на позиции {}", word, pos);
                     break;
                 }
             }
             
-            if (snippetStart == -1) {
+            // Если не нашли точное вхождение, ищем любые формы слов
+            if (bestPos == -1) {
+                for (String term : searchTerms) {
+                    int pos = lowerText.indexOf(term.toLowerCase());
+                    if (pos != -1) {
+                        bestPos = pos;
+                        bestTerm = term;
+                        foundWord = term;
+                        logger.info("Найдено вхождение термина '{}' на позиции {}", term, pos);
+                        break;
+                    }
+                }
+            }
+            
+            // Если все еще не нашли, ищем частичное вхождение (первые 4-5 букв)
+            if (bestPos == -1) {
+                for (String word : queryWords) {
+                    if (word.length() >= 4) {
+                        // Ищем слова, начинающиеся с первых 4 букв запроса
+                        String prefix = word.substring(0, Math.min(5, word.length())).toLowerCase();
+                        String[] words = lowerText.split("\\s+");
+                        int currentPos = 0;
+                        for (String textWord : words) {
+                            if (textWord.startsWith(prefix)) {
+                                // Находим позицию этого слова в тексте
+                                bestPos = lowerText.indexOf(textWord, currentPos);
+                                if (bestPos != -1) {
+                                    bestTerm = word;
+                                    // Извлекаем найденное слово из оригинального текста
+                                    int wordStart = bestPos;
+                                    int wordEnd = bestPos + textWord.length();
+                                    if (wordEnd <= cleanText.length()) {
+                                        foundWord = cleanText.substring(wordStart, wordEnd);
+                                        logger.info("Найдено частичное вхождение '{}' для слова '{}' на позиции {}", foundWord, word, bestPos);
+                                        break;
+                                    }
+                                }
+                            }
+                            currentPos += textWord.length() + 1;
+                        }
+                        if (bestPos != -1) break;
+                    }
+                }
+            }
+            
+            // Устанавливаем позицию сниппета
+            if (bestPos != -1) {
+                snippetStart = Math.max(0, bestPos - 100);
+                logger.info("Сниппет будет создан вокруг позиции {} для слова '{}'", snippetStart, bestTerm);
+            } else {
                 snippetStart = 0;
+                logger.info("Слово не найдено, используем начало документа");
             }
             
             // Берем фрагмент текста
-            int end = Math.min(text.length(), snippetStart + snippetLength);
-            String snippet = text.substring(snippetStart, end);
+            int end = Math.min(cleanText.length(), snippetStart + snippetLength);
+            String snippet = cleanText.substring(snippetStart, end).trim();
             
             // Выделяем найденные слова тегами <b>
-            for (String lemma : queryLemmas) {
-                // Используем регулярное выражение для поиска слова целиком (с учетом регистра)
-                String pattern = "(?i)\\b(" + java.util.regex.Pattern.quote(lemma) + ")\\b";
-                snippet = snippet.replaceAll(pattern, "<b>$1</b>");
+            // Создаем паттерны для всех форм слов из запроса
+            Set<String> wordsToHighlight = new HashSet<>();
+            wordsToHighlight.addAll(queryWords);
+            
+            // Добавляем формы слов для более точного поиска
+            for (String word : queryWords) {
+                wordsToHighlight.addAll(lemmatizer.findWordForms(word));
+            }
+            
+            // Если слово нашлось частично, добавляем его в список для выделения
+            if (!foundWord.isEmpty() && !foundWord.equals(bestTerm)) {
+                wordsToHighlight.add(foundWord);
+            }
+            
+            logger.info("Слова для выделения: {}", wordsToHighlight);
+            
+            // Выделяем каждое слово в сниппете
+            for (String word : wordsToHighlight) {
+                if (word.length() < 2) continue;
+                
+                try {
+                    // Простой поиск без regex - ищем слово (регистронезависимо)
+                    String lowerSnippet = snippet.toLowerCase();
+                    String lowerWord = word.toLowerCase();
+                    int index = 0;
+                    
+                    while ((index = lowerSnippet.indexOf(lowerWord, index)) != -1) {
+                        // Проверяем границы слова
+                        boolean isWordStart = (index == 0 || !Character.isLetter(snippet.charAt(index - 1)));
+                        boolean isWordEnd = (index + word.length() >= snippet.length() || 
+                                            !Character.isLetter(snippet.charAt(index + word.length())));
+                        
+                        if (isWordStart && isWordEnd) {
+                            // Извлекаем оригинальное слово (с учетом регистра)
+                            String originalWord = snippet.substring(index, index + word.length());
+                            
+                            // Заменяем только если еще не в тегах
+                            if (index < 3 || !snippet.substring(index - 3, index).equals("<b>")) {
+                                String before = snippet.substring(0, index);
+                                String after = snippet.substring(index + word.length());
+                                snippet = before + "<b>" + originalWord + "</b>" + after;
+                                lowerSnippet = snippet.toLowerCase();
+                                index += 7; // Длина "<b>" + слово + "</b>" = 7 + length
+                            } else {
+                                index += word.length();
+                            }
+                        } else {
+                            index += word.length();
+                        }
+                    }
+                    
+                } catch (Exception e) {
+                    logger.warn("Ошибка при выделении слова '{}': {}", word, e.getMessage());
+                }
             }
             
             // Добавляем многоточие, если текст обрезан
             if (snippetStart > 0) {
                 snippet = "..." + snippet;
             }
-            if (end < text.length()) {
+            if (end < cleanText.length()) {
                 snippet = snippet + "...";
             }
             
@@ -296,11 +450,36 @@ public class SearchServiceNew {
             // Fallback: просто очищаем HTML
             Lemmatizer lemmatizer = new Lemmatizer();
             String text = lemmatizer.cleanHtml(html);
-            if (text.length() > 200) {
-                text = text.substring(0, 200) + "...";
+            if (text.length() > 300) {
+                text = text.substring(0, 300) + "...";
             }
             return text;
         }
+    }
+    
+    /**
+     * Извлекает отдельные слова из запроса (без лемматизации)
+     */
+    private Set<String> extractWordsFromQuery(String query) {
+        Set<String> words = new HashSet<>();
+        
+        if (query == null || query.isEmpty()) {
+            return words;
+        }
+        
+        // Разбиваем запрос на слова, удаляем пунктуацию
+        String[] queryWords = query.toLowerCase()
+                .replaceAll("[^\\p{L}\\s]", " ")
+                .split("\\s+");
+        
+        for (String word : queryWords) {
+            word = word.trim();
+            if (word.length() >= 2) {
+                words.add(word);
+            }
+        }
+        
+        return words;
     }
 }
 
